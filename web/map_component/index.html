@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SatQuery AI — Imagery Picker (3D)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.12.0/maplibre-gl.css" />
+<script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@1.3.0/dist/streamlit.js"></script>
+<style>
+  :root{
+    --void:#05070C;
+    --panel:#101A2C;
+    --panel-raised:#16223A;
+    --line:#233250;
+    --line-soft:#1B2740;
+    --text:#E7EEF7;
+    --text-dim:#8FA1BE;
+    --radar:#35C8A6;
+    --radar-dim:#1F6E5C;
+    --infrared:#F2994A;
+    --font-ui: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; padding:0; height:100%; background:var(--void); color:var(--text); font-family:var(--font-ui); overflow:hidden; }
+  #app{ display:grid; grid-template-columns: 1fr 380px; grid-template-rows: 52px 1fr; height:100vh; width:100vw; }
+
+  header{
+    grid-column: 1 / 3; display:flex; align-items:center; justify-content:space-between;
+    padding: 0 18px; border-bottom:1px solid var(--line);
+    background: linear-gradient(180deg, #0E1729, #0B1220);
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .mark{ width:9px; height:9px; border-radius:50%; background:var(--radar); box-shadow: 0 0 8px 1px var(--radar); display:inline-block; transform: translateY(-1px); }
+  .brand h1{ font-size:15px; font-weight:600; margin:0; letter-spacing:0.2px; }
+  .brand span.sub{ color:var(--text-dim); font-size:12px; }
+  .header-status{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim); }
+  .header-status b{ color:var(--radar); font-weight:600; }
+
+  #map-wrap{ position:relative; background:radial-gradient(ellipse at 50% 40%, #0C1830 0%, #05070C 70%); }
+  #map{ height:100%; width:100%; }
+  .maplibregl-ctrl-attrib{ background:rgba(10,15,25,0.6) !important; color:var(--text-dim) !important; }
+  .maplibregl-ctrl-attrib a{ color:var(--text-dim) !important; }
+  .maplibregl-canvas{ outline:none; }
+
+  .map-toolbar{
+    position:absolute; top:14px; left:14px; z-index:5;
+    background:rgba(16,26,44,0.92); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; display:flex; flex-direction:column; gap:8px; backdrop-filter: blur(4px); max-width:300px;
+  }
+  .map-toolbar .hint{ font-size:11.5px; color:var(--text-dim); line-height:1.4; }
+  .map-toolbar .coords{ font-family:var(--font-mono); font-size:11px; color:var(--radar); }
+
+  .draw-btn{
+    background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+    font-size:12.5px; padding:7px 10px; border-radius:6px; cursor:pointer; text-align:left;
+    transition: border-color .15s ease;
+  }
+  .draw-btn:hover{ border-color:var(--radar-dim); }
+  .draw-btn.active{ border-color:var(--radar); color:var(--radar); }
+
+  .view-toggle{
+    position:absolute; top:14px; right:14px; z-index:5;
+    background:rgba(16,26,44,0.92); border:1px solid var(--line); border-radius:8px;
+    display:flex; overflow:hidden;
+  }
+  .view-toggle button{
+    background:transparent; border:none; color:var(--text-dim); font-size:12px;
+    padding:8px 14px; cursor:pointer;
+  }
+  .view-toggle button.active{ background:var(--radar); color:#04241D; font-weight:600; }
+
+  .exaggeration-box{
+    position:absolute; bottom:14px; left:14px; z-index:5;
+    background:rgba(16,26,44,0.92); border:1px solid var(--line); border-radius:8px;
+    padding:9px 12px; display:flex; align-items:center; gap:8px;
+  }
+  .exaggeration-box label{ font-size:11px; color:var(--text-dim); white-space:nowrap; }
+  .exaggeration-box input[type=range]{ width:110px; }
+  .exaggeration-box span{ font-family:var(--font-mono); font-size:11px; color:var(--radar); width:28px; }
+
+  .basemap-box{
+    position:absolute; bottom:14px; right:14px; z-index:5;
+    background:rgba(16,26,44,0.94); border:1px solid var(--line); border-radius:8px;
+    padding:11px 13px; width:250px;
+  }
+  .basemap-box .row-title{ font-size:11.5px; color:var(--text-dim); margin-bottom:8px; }
+  .basemap-toggle{ display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-bottom:9px; }
+  .basemap-toggle button{
+    flex:1; background:var(--panel-raised); border:none; color:var(--text-dim);
+    font-size:11.5px; padding:7px 0; cursor:pointer;
+  }
+  .basemap-toggle button.active{ background:var(--radar); color:#04241D; font-weight:600; }
+  .basemap-daily-controls{ display:none; flex-direction:column; gap:7px; }
+  .basemap-daily-controls select, .basemap-daily-controls input[type=date]{
+    width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+    font-size:11.5px; padding:6px 8px; border-radius:5px; font-family:var(--font-ui);
+  }
+  .basemap-note{ font-size:10.5px; color:var(--text-dim); line-height:1.4; margin-top:7px; }
+  .basemap-note b{ color:var(--infrared); }
+
+  .location-bar{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:5;
+    display:flex; align-items:center; gap:6px;
+    background:rgba(16,26,44,0.92); border:1px solid var(--line); border-radius:8px;
+    padding:6px; backdrop-filter: blur(4px);
+    width:340px;
+  }
+  .location-bar input{
+    flex:1; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+    font-size:12.5px; padding:7px 9px; border-radius:6px; font-family:var(--font-ui);
+  }
+  .location-bar input:focus{ outline:2px solid var(--radar-dim); outline-offset:1px; }
+  .location-bar button{
+    background:var(--panel-raised); border:1px solid var(--line); color:var(--text-dim);
+    border-radius:6px; width:32px; height:32px; flex-shrink:0; cursor:pointer; font-size:14px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .location-bar button:hover{ border-color:var(--radar-dim); color:var(--text); }
+  .location-bar button.locating{ color:var(--radar); border-color:var(--radar); }
+
+  .location-results{
+    position:absolute; top:58px; left:50%; transform:translateX(-50%); z-index:5;
+    width:340px; background:rgba(16,26,44,0.97); border:1px solid var(--line); border-radius:8px;
+    overflow:hidden; display:none;
+  }
+  .location-results .loc-item{
+    padding:9px 12px; font-size:12.5px; color:var(--text-dim); cursor:pointer;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .location-results .loc-item:last-child{ border-bottom:none; }
+  .location-results .loc-item:hover{ background:var(--panel-raised); color:var(--text); }
+  .location-results .loc-item .name{ color:var(--text); }
+  .location-results .loc-empty{ padding:10px 12px; font-size:12px; color:var(--text-dim); }
+
+  #sidebar{ background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+  .tabs{ display:flex; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .tab{ flex:1; text-align:center; padding:11px 0; font-size:12.5px; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.active{ color:var(--text); border-bottom-color:var(--radar); }
+
+  .panel{ padding:16px; overflow-y:auto; flex:1; }
+  .panel::-webkit-scrollbar{ width:8px; }
+  .panel::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:11.5px; color:var(--text-dim); margin-bottom:6px; }
+  .field .row{ display:flex; gap:8px; }
+  select, input[type=date], input[type=range]{
+    width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text);
+    font-size:13px; padding:8px 9px; border-radius:6px; font-family:var(--font-ui);
+  }
+  select:focus, input:focus{ outline:2px solid var(--radar-dim); outline-offset:1px; }
+
+  .cloud-row{ display:flex; align-items:center; gap:10px; }
+  .cloud-row span{ font-family:var(--font-mono); font-size:12px; color:var(--radar); width:38px; text-align:right;}
+
+  .btn-primary{
+    width:100%; background:var(--radar); color:#04241D; font-weight:600; font-size:13px;
+    border:none; padding:11px 0; border-radius:7px; cursor:pointer; letter-spacing:0.2px;
+  }
+  .btn-primary:disabled{ background:var(--line); color:var(--text-dim); cursor:not-allowed; }
+  .btn-primary:hover:not(:disabled){ filter:brightness(1.08); }
+
+  .aoi-readout{
+    font-family:var(--font-mono); font-size:11px; color:var(--text-dim);
+    background:var(--panel-raised); border:1px solid var(--line-soft); border-radius:6px;
+    padding:9px 10px; line-height:1.6; margin-bottom:16px; word-break:break-all;
+  }
+  .aoi-readout .empty{ color:var(--text-dim); font-style:normal; }
+
+  .section-title{ font-size:12px; color:var(--text-dim); margin:0 0 10px 0; display:flex; justify-content:space-between; align-items:center; }
+  .section-title .count{ font-family:var(--font-mono); color:var(--radar); }
+
+  .scene-card{
+    display:flex; gap:10px; background:var(--panel-raised); border:1px solid var(--line-soft);
+    border-radius:8px; padding:9px; margin-bottom:9px; cursor:pointer; transition: border-color .15s ease;
+  }
+  .scene-card:hover{ border-color:var(--radar-dim); }
+  .scene-card.selected{ border-color:var(--radar); background:#12271F; }
+  .scene-thumb{ width:56px; height:56px; border-radius:5px; flex-shrink:0; background-size:cover; background-position:center; border:1px solid var(--line); }
+  .scene-meta{ flex:1; min-width:0; }
+  .scene-meta .id{ font-family:var(--font-mono); font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .scene-meta .date{ font-size:12px; color:var(--text); margin-top:2px;}
+  .scene-meta .stats{ font-size:11px; color:var(--text-dim); margin-top:3px; display:flex; gap:10px;}
+  .scene-meta .stats b{ color:var(--infrared); font-weight:600; }
+
+  .empty-state{ text-align:center; color:var(--text-dim); font-size:12.5px; padding: 30px 10px; line-height:1.6; }
+
+  .notice{ font-size:11.5px; color:var(--text-dim); line-height:1.5; background:var(--panel-raised); border:1px solid var(--line-soft); border-radius:6px; padding:9px 10px; margin-top:14px; }
+  .notice b{ color:var(--infrared); }
+
+  .footer-actions{ padding:14px 16px; border-top:1px solid var(--line); flex-shrink:0; }
+  .exec-log{ font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:#080D17; border:1px solid var(--line-soft); border-radius:6px; padding:10px; margin-top:10px; line-height:1.7; max-height:140px; overflow-y:auto; }
+  .exec-log .ok{ color:var(--radar); }
+  .exec-log .pending{ color:var(--infrared); }
+
+  ::selection{ background:var(--radar-dim); color:#fff; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <span class="mark"></span>
+      <h1>SatQuery AI</h1>
+      <span class="sub">Imagery Picker — 3D globe</span>
+    </div>
+    <div class="header-status" id="header-status">NO AOI SELECTED</div>
+  </header>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <div class="view-toggle">
+      <button id="btn-globe" class="active">Globe</button>
+      <button id="btn-flat">Flat</button>
+    </div>
+
+    <div class="map-toolbar">
+      <div class="hint">Click "Set AOI", then click two opposite corners on the globe.</div>
+      <button class="draw-btn" id="btn-draw-rect">▭ &nbsp;Set AOI (2 clicks)</button>
+      <button class="draw-btn" id="btn-draw-clear">✕ &nbsp;Clear AOI</button>
+      <div class="coords" id="coord-readout">lat —, lon —</div>
+    </div>
+
+    <div class="exaggeration-box">
+      <label>Terrain relief</label>
+      <input type="range" id="terrain-exaggeration" min="0" max="3" step="0.1" value="1.4">
+      <span id="terrain-value">1.4x</span>
+    </div>
+
+    <div class="location-bar">
+      <input type="text" id="location-input" placeholder="Search a place, city, or coordinates…">
+      <button id="btn-location-search" title="Search">⌕</button>
+      <button id="btn-my-location" title="Use my location">◎</button>
+    </div>
+    <div class="location-results" id="location-results"></div>
+
+    <div class="basemap-box">
+      <div class="row-title">Basemap</div>
+      <div class="basemap-toggle">
+        <button id="btn-basemap-sharp" class="active">Reference</button>
+        <button id="btn-basemap-daily">Daily (NRT)</button>
+      </div>
+      <div class="basemap-daily-controls" id="ref-controls" style="display:flex;">
+        <select id="ref-style">
+          <option value="s2cloudless">Sentinel-2 cloudless mosaic</option>
+          <option value="esri">Esri World Imagery (clearest)</option>
+          <option value="bhuvan">Bhuvan (ISRO/NRSC) — WMS</option>
+          <option value="osm">OpenStreetMap</option>
+          <option value="voyager">Voyager</option>
+          <option value="light">Light</option>
+        </select>
+        <div id="bhuvan-fields" style="display:none; margin-top:8px;">
+          <input type="text" id="bhuvan-layer" placeholder="Bhuvan WMS layer name (e.g. india3)" style="width:100%; background:var(--panel-raised); border:1px solid var(--line); color:var(--text); font-size:11.5px; padding:6px 8px; border-radius:5px; font-family:var(--font-ui); margin-bottom:6px;">
+          <button class="draw-btn" id="btn-bhuvan-apply" style="width:100%;">Apply layer</button>
+        </div>
+      </div>
+      <div class="basemap-daily-controls" id="daily-controls">
+        <select id="daily-sensor">
+          <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra — true color</option>
+          <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua — true color</option>
+          <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">VIIRS SNPP — true color</option>
+        </select>
+        <input type="date" id="daily-date">
+      </div>
+      <label style="display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-dim); margin-top:9px; cursor:pointer;">
+        <input type="checkbox" id="toggle-labels" checked style="width:auto; accent-color:#35C8A6;">
+        Show place labels
+      </label>
+      <div class="basemap-note" id="basemap-note">Same default background Copernicus Browser uses — sharp, but a fixed 2020 composite.</div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="tabs">
+      <div class="tab active" data-tab="search">Search</div>
+      <div class="tab" data-tab="results">Results</div>
+    </div>
+
+    <div class="panel" id="panel-search">
+      <div class="aoi-readout" id="aoi-readout"><span class="empty">AOI: none — set two corners on the globe</span></div>
+
+      <div class="field">
+        <label>Collection</label>
+        <select id="sel-collection">
+          <option value="sentinel-2-l2a">Sentinel-2 L2A — optical / multispectral</option>
+          <option value="sentinel-1-grd">Sentinel-1 GRD — SAR</option>
+          <option value="pair">Optical + SAR pair (for fusion query)</option>
+        </select>
+      </div>
+
+      <div class="field row">
+        <div style="flex:1">
+          <label>From</label>
+          <input type="date" id="date-from" value="2026-06-01">
+        </div>
+        <div style="flex:1">
+          <label>To</label>
+          <input type="date" id="date-to" value="2026-09-01">
+        </div>
+      </div>
+
+      <div class="field" id="cloud-field">
+        <label>Max cloud cover</label>
+        <div class="cloud-row">
+          <input type="range" id="cloud-slider" min="0" max="100" value="30">
+          <span id="cloud-value">30%</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-search" disabled>Search archive</button>
+
+      <div class="notice">
+        <b>Basemap:</b> EOX Sentinel-2 cloudless mosaic, rendered on a 3D globe with real elevation relief (open elevation tiles). <b>Downloads</b> still route through the Sentinel Hub Process API on the SatQuery backend, where credentials stay server-side.
+      </div>
+    </div>
+
+    <div class="panel" id="panel-results" style="display:none;">
+      <div class="section-title"><span>Matching scenes</span><span class="count" id="result-count">0</span></div>
+      <div id="results-list"></div>
+    </div>
+
+    <div class="footer-actions">
+      <div id="selection-summary" style="font-size:12px; color:var(--text-dim); margin-bottom:8px;">No scene selected yet.</div>
+      <button class="btn-primary" id="btn-send" disabled>Send Coordinates &amp; Date to SatQuery AI</button>
+      <div class="exec-log" id="exec-log" style="display:none;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.12.0/maplibre-gl.js"></script>
+<script>
+(function(){
+
+  // ---------- Map setup: 3D globe, satellite imagery, real terrain relief ----------
+  const map = new maplibregl.Map({
+    container: 'map',
+    zoom: 3.2,
+    center: [78.9, 20.6],
+    pitch: 55,
+    bearing: 0,
+    maxPitch: 85,
+    antialias: true,
+    style: {
+      version: 8,
+      projection: { type: 'globe' },
+      sources: {
+        satellite: {
+          type: 'raster',
+          tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'],
+          tileSize: 256,
+          attribution: 'Sentinel-2 cloudless — EOX IT Services / Copernicus'
+        },
+        labels: {
+          type: 'raster',
+          tiles: ['https://a.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png',
+                  'https://b.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png',
+                  'https://c.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png'],
+          tileSize: 256,
+          attribution: 'Labels — CARTO / OpenStreetMap contributors'
+        },
+        'terrain-dem': {
+          type: 'raster-dem',
+          tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          encoding: 'terrarium',
+          maxzoom: 13
+        }
+      },
+      layers: [
+        { id: 'satellite', type: 'raster', source: 'satellite' },
+        { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.95 } }
+      ],
+      terrain: { source: 'terrain-dem', exaggeration: 1.4 },
+      sky: {
+        'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0]
+      },
+      light: { anchor: 'map', position: [1.5, 90, 80] }
+    }
+  });
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+
+  map.on('style.load', function(){
+    map.setProjection({ type: 'globe' });
+    map.setTerrain({ source: 'terrain-dem', exaggeration: parseFloat(document.getElementById('terrain-exaggeration').value) });
+    map.setMaxZoom(16.5); // matches the initial Sentinel-2 cloudless basemap's native resolution
+  });
+
+  document.getElementById('terrain-exaggeration').addEventListener('input', function(){
+    document.getElementById('terrain-value').textContent = this.value + 'x';
+    map.setTerrain({ source: 'terrain-dem', exaggeration: parseFloat(this.value) });
+  });
+
+  document.getElementById('btn-globe').addEventListener('click', function(){
+    map.setProjection({ type: 'globe' });
+    this.classList.add('active');
+    document.getElementById('btn-flat').classList.remove('active');
+  });
+  document.getElementById('btn-flat').addEventListener('click', function(){
+    map.setProjection({ type: 'mercator' });
+    this.classList.add('active');
+    document.getElementById('btn-globe').classList.remove('active');
+  });
+
+  // ---------- Basemap: reference styles (matching Copernicus Browser) vs NASA GIBS daily NRT ----------
+  const REF_STYLES = {
+    s2cloudless: {
+      tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg'],
+      note: 'Same default background Copernicus Browser uses — sharp (10m), but a fixed 2020 composite.',
+      maxNativeZoom: 14
+    },
+    esri: {
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      note: 'Esri World Imagery — blended aerial + sub-meter satellite composite. The clearest close-up option here, but resolution varies by region and it isn\'t a single dated acquisition.',
+      maxNativeZoom: 19
+    },
+    osm: {
+      tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      note: 'OpenStreetMap — one of Copernicus Browser\'s alternate backgrounds. Street map, no satellite imagery.',
+      maxNativeZoom: 19
+    },
+    voyager: {
+      tiles: ['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+              'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
+              'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png'],
+      note: 'CARTO Voyager — the same "Voyager" option Copernicus Browser offers.',
+      maxNativeZoom: 19
+    },
+    light: {
+      tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+              'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
+              'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'],
+      note: 'CARTO Light — the same "Light" option Copernicus Browser offers.',
+      maxNativeZoom: 19
+    }
+  };
+  const GIBS_MAX_NATIVE_ZOOM = 9;
+  const BHUVAN_WMS_BASE = 'https://bhuvan-vec2.nrsc.gov.in/bhuvan/wms/get';
+  const BHUVAN_CAPABILITIES_URL = BHUVAN_WMS_BASE + '?service=WMS&request=GetCapabilities';
+
+  function bhuvanTiles(layerName){
+    // MapLibre's {bbox-epsg-3857} template turns a WMS GetMap request into
+    // something it can tile like any XYZ source.
+    return [BHUVAN_WMS_BASE +
+      '?service=WMS&version=1.1.1&request=GetMap&layers=' + encodeURIComponent(layerName) +
+      '&styles=&format=image/png&transparent=false&srs=EPSG:3857' +
+      '&width=256&height=256&bbox={bbox-epsg-3857}'];
+  }
+
+  function gibsTiles(layer, dateStr){
+    return ['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' + layer +
+      '/default/' + dateStr + '/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg'];
+  }
+
+  function defaultDailyDate(){
+    // GIBS typically has 1–2 day latency; default a couple of days back so the
+    // first view isn't blank while data backfills.
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    return d.toISOString().slice(0,10);
+  }
+  document.getElementById('daily-date').value = defaultDailyDate();
+  document.getElementById('daily-date').max = new Date().toISOString().slice(0,10);
+
+  function swapBasemap(tiles, maxNativeZoom){
+    const beforeId = map.getLayer('labels') ? 'labels' : (map.getLayer('aoi-fill') ? 'aoi-fill' : undefined);
+    if(map.getLayer('satellite')) map.removeLayer('satellite');
+    if(map.getSource('satellite')) map.removeSource('satellite');
+    map.addSource('satellite', { type:'raster', tiles: tiles, tileSize:256, maxzoom: maxNativeZoom });
+    map.addLayer({ id:'satellite', type:'raster', source:'satellite' }, beforeId);
+    // Stop the camera from zooming past what this imagery actually resolves —
+    // otherwise MapLibre just upscales the last tile and it reads as blur.
+    map.setMaxZoom(maxNativeZoom + 2.5);
+  }
+
+  function setBasemapMode(mode){
+    const note = document.getElementById('basemap-note');
+    document.getElementById('btn-basemap-sharp').classList.toggle('active', mode==='ref');
+    document.getElementById('btn-basemap-daily').classList.toggle('active', mode==='daily');
+    document.getElementById('ref-controls').style.display = mode==='ref' ? 'flex' : 'none';
+    document.getElementById('daily-controls').style.display = mode==='daily' ? 'flex' : 'none';
+
+    if(mode==='ref'){
+      const styleKey = document.getElementById('ref-style').value;
+      document.getElementById('bhuvan-fields').style.display = styleKey==='bhuvan' ? 'block' : 'none';
+
+      if(styleKey === 'bhuvan'){
+        const layerName = document.getElementById('bhuvan-layer').value.trim();
+        if(!layerName){
+          note.innerHTML = 'Enter the exact Bhuvan WMS layer name above, then click "Apply layer". ' +
+            'You can find valid layer names by opening <span style="word-break:break-all">' + BHUVAN_CAPABILITIES_URL + '</span> ' +
+            'in a new tab (it lists every available &lt;Name&gt; under &lt;Layer&gt;) — their server can be slow to respond.';
+          return;
+        }
+        swapBasemap(bhuvanTiles(layerName), 17);
+        note.innerHTML = 'Bhuvan (ISRO/NRSC) WMS — layer "<b>'+layerName+'</b>". This is India-only imagery served live from NRSC\'s own servers; if tiles don\'t appear, the layer name may be wrong or their server may be temporarily slow/unreachable from here.';
+        return;
+      }
+
+      const style = REF_STYLES[styleKey];
+      swapBasemap(style.tiles, style.maxNativeZoom);
+      note.innerHTML = style.note + ' <b>Zoom is capped near its native resolution to avoid blur.</b>';
+    } else {
+      const layer = document.getElementById('daily-sensor').value;
+      const date = document.getElementById('daily-date').value || defaultDailyDate();
+      swapBasemap(gibsTiles(layer, date), GIBS_MAX_NATIVE_ZOOM);
+      note.innerHTML = 'NASA GIBS near-real-time feed — updates daily, but <b>~250m/pixel</b>, capped at a wider zoom so it doesn\'t smear. Fine for weather/cloud context, not close-up detail.';
+    }
+  }
+
+  document.getElementById('btn-basemap-sharp').addEventListener('click', function(){ setBasemapMode('ref'); });
+  document.getElementById('btn-basemap-daily').addEventListener('click', function(){ setBasemapMode('daily'); });
+  document.getElementById('ref-style').addEventListener('change', function(){ setBasemapMode('ref'); });
+  document.getElementById('btn-bhuvan-apply').addEventListener('click', function(){ setBasemapMode('ref'); });
+  document.getElementById('bhuvan-layer').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') setBasemapMode('ref');
+  });
+  document.getElementById('daily-sensor').addEventListener('change', function(){ setBasemapMode('daily'); });
+  document.getElementById('daily-date').addEventListener('change', function(){ setBasemapMode('daily'); });
+
+  document.getElementById('toggle-labels').addEventListener('change', function(){
+    if(map.getLayer('labels')){
+      map.setLayoutProperty('labels', 'visibility', this.checked ? 'visible' : 'none');
+    }
+  });
+
+  // ---------- Location search ----------
+  let locationMarker = null;
+
+  function placeLocationMarker(lng, lat, label){
+    if(locationMarker) locationMarker.remove();
+    const el = document.createElement('div');
+    el.style.width='14px'; el.style.height='14px'; el.style.borderRadius='50%';
+    el.style.background='#F2994A'; el.style.border='2px solid #fff';
+    el.style.boxShadow='0 0 8px 2px rgba(242,153,74,0.7)';
+    locationMarker = new maplibregl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText(label || (lat.toFixed(3)+', '+lng.toFixed(3))))
+      .addTo(map);
+  }
+
+  function flyToLocation(lng, lat, label, zoom){
+    map.flyTo({ center:[lng, lat], zoom: zoom || 9, pitch: 55, speed:0.9, curve:1.4 });
+    placeLocationMarker(lng, lat, label);
+  }
+
+  function parseCoordPair(q){
+    // Accepts "lat, lon" or "lat lon"
+    const m = q.trim().match(/^(-?\d+(\.\d+)?)\s*[,\s]\s*(-?\d+(\.\d+)?)$/);
+    if(!m) return null;
+    const lat = parseFloat(m[1]), lon = parseFloat(m[3]);
+    if(Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon };
+  }
+
+  function hideLocationResults(){
+    const box = document.getElementById('location-results');
+    box.style.display = 'none';
+    box.innerHTML = '';
+  }
+
+  async function runLocationSearch(){
+    const q = document.getElementById('location-input').value.trim();
+    const box = document.getElementById('location-results');
+    if(!q) return;
+
+    const asCoord = parseCoordPair(q);
+    if(asCoord){
+      flyToLocation(asCoord.lon, asCoord.lat, q, 10);
+      hideLocationResults();
+      return;
+    }
+
+    box.style.display = 'block';
+    box.innerHTML = '<div class="loc-empty">Searching…</div>';
+
+    try{
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&q=' + encodeURIComponent(q);
+      const resp = await fetch(url, { headers: { 'Accept':'application/json' } });
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      const results = await resp.json();
+
+      if(!results.length){
+        box.innerHTML = '<div class="loc-empty">No matches. Try a coordinate pair like "11.3, 77.1".</div>';
+        return;
+      }
+
+      box.innerHTML = '';
+      results.forEach(function(r){
+        const item = document.createElement('div');
+        item.className = 'loc-item';
+        item.innerHTML = '<span class="name">'+r.display_name.split(',')[0]+'</span><br>'+r.display_name;
+        item.addEventListener('click', function(){
+          flyToLocation(parseFloat(r.lon), parseFloat(r.lat), r.display_name.split(',')[0], 10);
+          hideLocationResults();
+        });
+        box.appendChild(item);
+      });
+    }catch(err){
+      box.innerHTML = '<div class="loc-empty">Search unavailable right now (network blocked in this preview). Try a coordinate pair like "11.3, 77.1" instead.</div>';
+    }
+  }
+
+  document.getElementById('btn-location-search').addEventListener('click', runLocationSearch);
+  document.getElementById('location-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') runLocationSearch();
+  });
+  document.addEventListener('click', function(e){
+    const bar = document.querySelector('.location-bar');
+    const box = document.getElementById('location-results');
+    if(!bar.contains(e.target) && !box.contains(e.target)) hideLocationResults();
+  });
+
+  document.getElementById('btn-my-location').addEventListener('click', function(){
+    const btn = this;
+    if(!navigator.geolocation){
+      alert('Geolocation is not available in this browser.');
+      return;
+    }
+    btn.classList.add('locating');
+    btn.textContent = '…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      flyToLocation(pos.coords.longitude, pos.coords.latitude, 'Your location', 11);
+      btn.classList.remove('locating');
+      btn.textContent = '◎';
+    }, function(err){
+      alert('Could not get your location: ' + err.message);
+      btn.classList.remove('locating');
+      btn.textContent = '◎';
+    }, { timeout: 8000 });
+  });
+
+  // ---------- Click-mode state (AOI corner picking) ----------
+  let clickMode = null; // null | 'aoi'
+
+  // ---------- AOI selection: click two opposite corners ----------
+  let cornerA = null;
+  let markers = [];
+  let currentAOI = null; // simple bbox object exposing getWest/getSouth/getEast/getNorth
+
+  function makeBBox(a, b){
+    const west = Math.min(a.lng, b.lng), east = Math.max(a.lng, b.lng);
+    const south = Math.min(a.lat, b.lat), north = Math.max(a.lat, b.lat);
+    return {
+      getWest: () => west, getEast: () => east,
+      getSouth: () => south, getNorth: () => north
+    };
+  }
+
+  function clearAOILayer(){
+    if(map.getLayer('aoi-fill')) map.removeLayer('aoi-fill');
+    if(map.getLayer('aoi-line')) map.removeLayer('aoi-line');
+    if(map.getSource('aoi')) map.removeSource('aoi');
+    markers.forEach(m=>m.remove());
+    markers = [];
+  }
+
+  function drawAOILayer(b){
+    clearAOILayer();
+    const ring = [
+      [b.getWest(), b.getSouth()],
+      [b.getEast(), b.getSouth()],
+      [b.getEast(), b.getNorth()],
+      [b.getWest(), b.getNorth()],
+      [b.getWest(), b.getSouth()]
+    ];
+    map.addSource('aoi', {
+      type: 'geojson',
+      data: { type:'Feature', geometry:{ type:'Polygon', coordinates:[ring] }, properties:{} }
+    });
+    map.addLayer({ id:'aoi-fill', type:'fill', source:'aoi', paint:{ 'fill-color':'#35C8A6', 'fill-opacity':0.15 } });
+    map.addLayer({ id:'aoi-line', type:'line', source:'aoi', paint:{ 'line-color':'#35C8A6', 'line-width':2 } });
+  }
+
+  function setStatus(text){
+    document.getElementById('header-status').textContent = text;
+  }
+
+  function approxAreaKm2(b){
+    const latMid = (b.getNorth()+b.getSouth())/2;
+    const kmPerDegLat = 111.0;
+    const kmPerDegLon = 111.0 * Math.cos(latMid*Math.PI/180);
+    const h = Math.abs(b.getNorth()-b.getSouth())*kmPerDegLat;
+    const w = Math.abs(b.getEast()-b.getWest())*kmPerDegLon;
+    return Math.round(w*h);
+  }
+
+  function updateAOIReadout(){
+    const el = document.getElementById('aoi-readout');
+    const btnSearch = document.getElementById('btn-search');
+    if(!currentAOI){
+      el.innerHTML = '<span class="empty">AOI: none — set two corners on the globe</span>';
+      btnSearch.disabled = true;
+      setStatus('NO AOI SELECTED');
+      return;
+    }
+    const b = currentAOI;
+    el.innerHTML =
+      'AOI bbox<br>' +
+      'W ' + b.getWest().toFixed(4) + '&nbsp;&nbsp; S ' + b.getSouth().toFixed(4) + '<br>' +
+      'E ' + b.getEast().toFixed(4) + '&nbsp;&nbsp; N ' + b.getNorth().toFixed(4);
+    btnSearch.disabled = false;
+    setStatus('AOI READY — ' + approxAreaKm2(b) + ' KM²');
+  }
+
+  document.getElementById('btn-draw-rect').addEventListener('click', function(){
+    clickMode = 'aoi';
+    cornerA = null;
+    this.classList.add('active');
+    map.getCanvas().style.cursor = 'crosshair';
+  });
+
+  document.getElementById('btn-draw-clear').addEventListener('click', function(){
+    clearAOILayer();
+    currentAOI = null;
+    if(clickMode === 'aoi') clickMode = null;
+    cornerA = null;
+    document.getElementById('btn-draw-rect').classList.remove('active');
+    map.getCanvas().style.cursor = '';
+    updateAOIReadout();
+  });
+
+  map.on('click', function(e){
+    if(clickMode === 'aoi'){
+      if(!cornerA){
+        cornerA = e.lngLat;
+        const m = new maplibregl.Marker({ color:'#35C8A6' }).setLngLat(cornerA).addTo(map);
+        markers.push(m);
+      } else {
+        const cornerB = e.lngLat;
+        currentAOI = makeBBox(cornerA, cornerB);
+        drawAOILayer(currentAOI);
+        clickMode = null;
+        cornerA = null;
+        document.getElementById('btn-draw-rect').classList.remove('active');
+        map.getCanvas().style.cursor = '';
+        updateAOIReadout();
+      }
+    }
+  });
+
+  map.on('mousemove', function(e){
+    document.getElementById('coord-readout').textContent =
+      'lat ' + e.lngLat.lat.toFixed(3) + ', lon ' + e.lngLat.lng.toFixed(3);
+  });
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-search').style.display = tab.dataset.tab==='search' ? 'block':'none';
+      document.getElementById('panel-results').style.display = tab.dataset.tab==='results' ? 'block':'none';
+    });
+  });
+
+  // ---------- Cloud slider ----------
+  const cloudSlider = document.getElementById('cloud-slider');
+  cloudSlider.addEventListener('input', function(){
+    document.getElementById('cloud-value').textContent = this.value + '%';
+  });
+
+  document.getElementById('sel-collection').addEventListener('change', function(){
+    document.getElementById('cloud-field').style.display = this.value==='sentinel-1-grd' ? 'none':'block';
+  });
+
+  // ---------- Search (live STAC call, with graceful fallback) ----------
+  let selectedScene = null;
+
+  async function searchScenes(){
+    const collectionSel = document.getElementById('sel-collection').value;
+    const from = document.getElementById('date-from').value;
+    const to = document.getElementById('date-to').value;
+    const maxCloud = parseInt(cloudSlider.value, 10);
+    const b = currentAOI;
+
+    const collections = collectionSel === 'pair'
+      ? ['sentinel-2-l2a', 'sentinel-1-grd']
+      : [collectionSel];
+
+    const resultsList = document.getElementById('results-list');
+    resultsList.innerHTML = '<div class="empty-state">Querying Copernicus Data Space Ecosystem…</div>';
+    document.querySelector('.tab[data-tab="results"]').click();
+
+    let allFeatures = [];
+    let liveOk = true;
+
+    for(const coll of collections){
+      try{
+        const body = {
+          collections: [coll],
+          bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+          datetime: from + 'T00:00:00Z/' + to + 'T23:59:59Z',
+          limit: 8
+        };
+        const resp = await fetch('https://catalogue.dataspace.copernicus.eu/stac/search', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(body)
+        });
+        if(!resp.ok) throw new Error('HTTP '+resp.status);
+        const json = await resp.json();
+        const feats = (json.features||[]).map(f=>normalizeFeature(f, coll));
+        allFeatures = allFeatures.concat(feats);
+      }catch(err){
+        liveOk = false;
+      }
+    }
+
+    if(!liveOk || allFeatures.length===0){
+      allFeatures = allFeatures.concat(mockScenes(collections, from, to, maxCloud));
+    }
+
+    if(collectionSel !== 'sentinel-1-grd'){
+      allFeatures = allFeatures.filter(f => f.collection==='sentinel-1-grd' || f.cloud===null || f.cloud<=maxCloud);
+    }
+
+    renderResults(allFeatures, !liveOk);
+  }
+
+  function normalizeFeature(f, coll){
+    const props = f.properties || {};
+    return {
+      id: f.id,
+      collection: coll,
+      date: (props.datetime||'').slice(0,10),
+      cloud: props['eo:cloud_cover'] != null ? Math.round(props['eo:cloud_cover']) : null,
+      thumb: (f.assets && f.assets.thumbnail && f.assets.thumbnail.href) || null,
+      bbox: f.bbox || null
+    };
+  }
+
+  function mockScenes(collections, from, to, maxCloud){
+    const out = [];
+    collections.forEach(function(coll){
+      const n = 4;
+      for(let i=0;i<n;i++){
+        const d = new Date(from);
+        d.setDate(d.getDate() + i*9 + 2);
+        const cloud = coll==='sentinel-1-grd' ? null : Math.min(maxCloud, 5+i*11);
+        out.push({
+          id: (coll==='sentinel-1-grd' ? 'S1A_IW_GRDH_' : 'S2B_MSIL2A_') + d.toISOString().slice(0,10).replace(/-/g,'') + '_T43PFN',
+          collection: coll,
+          date: d.toISOString().slice(0,10),
+          cloud: cloud,
+          thumb: null,
+          bbox: null
+        });
+      }
+    });
+    return out;
+  }
+
+  function renderResults(features, isFallback){
+    const resultsList = document.getElementById('results-list');
+    document.getElementById('result-count').textContent = features.length;
+    resultsList.innerHTML = '';
+
+    if(isFallback){
+      const note = document.createElement('div');
+      note.className = 'notice';
+      note.style.marginBottom = '12px';
+      note.innerHTML = '<b>Preview mode:</b> the live STAC catalog call was blocked by this preview\'s browser sandbox, so representative scenes are shown. Deployed behind your own backend, this panel calls the real Copernicus Data Space Ecosystem catalog.';
+      resultsList.appendChild(note);
+    }
+
+    if(features.length===0){
+      resultsList.innerHTML += '<div class="empty-state">No scenes matched. Try widening the date range or cloud-cover limit.</div>';
+      return;
+    }
+
+    features.forEach(function(f){
+      const card = document.createElement('div');
+      card.className = 'scene-card';
+      card.dataset.id = f.id;
+
+      const thumb = document.createElement('div');
+      thumb.className = 'scene-thumb';
+      if(f.thumb){
+        thumb.style.backgroundImage = "url('"+f.thumb+"')";
+      } else {
+        thumb.style.background = f.collection==='sentinel-1-grd'
+          ? 'linear-gradient(135deg,#1B2740,#233250)'
+          : 'linear-gradient(135deg,#173327,#1F6E5C)';
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'scene-meta';
+      const cloudStr = f.cloud!=null ? '<b>'+f.cloud+'% cloud</b>' : 'SAR — all-weather';
+      meta.innerHTML =
+        '<div class="id">'+f.id+'</div>' +
+        '<div class="date">'+f.date+'</div>' +
+        '<div class="stats"><span>'+labelFor(f.collection)+'</span><span>'+cloudStr+'</span></div>';
+
+      card.appendChild(thumb);
+      card.appendChild(meta);
+      card.addEventListener('click', function(){
+        document.querySelectorAll('.scene-card').forEach(c=>c.classList.remove('selected'));
+        card.classList.add('selected');
+        selectScene(f);
+      });
+
+      resultsList.appendChild(card);
+    });
+  }
+
+  function labelFor(coll){
+    if(coll==='sentinel-2-l2a') return 'Sentinel-2 L2A';
+    if(coll==='sentinel-1-grd') return 'Sentinel-1 GRD';
+    return coll;
+  }
+
+  function selectScene(f){
+    selectedScene = f;
+    document.getElementById('selection-summary').innerHTML =
+      'Selected: <b style="color:var(--text)">'+f.id+'</b> ('+labelFor(f.collection)+', '+f.date+')';
+    document.getElementById('btn-send').disabled = false;
+  }
+
+  document.getElementById('btn-search').addEventListener('click', searchScenes);
+
+  // ---------- Send to SatQuery (Streamlit bi-directional bridge) ----------
+  document.getElementById('btn-send').addEventListener('click', function(){
+    if(!selectedScene || !currentAOI) return;
+
+    const west = currentAOI.getWest();
+    const south = currentAOI.getSouth();
+    const east = currentAOI.getEast();
+    const north = currentAOI.getNorth();
+
+    const payload = {
+      bbox: [west, south, east, north],
+      date: selectedScene.date,
+      collection: selectedScene.collection
+    };
+
+    const log = document.getElementById('exec-log');
+    log.style.display = 'block';
+    log.innerHTML = '';
+
+    if(window.Streamlit){
+      Streamlit.setComponentValue(payload);
+      const line = document.createElement('div');
+      line.className = 'ok';
+      line.textContent = '> Sent to SatQuery AI — bbox [' +
+        west.toFixed(4) + ', ' + south.toFixed(4) + ', ' +
+        east.toFixed(4) + ', ' + north.toFixed(4) + '], date ' +
+        selectedScene.date + ' (' + labelFor(selectedScene.collection) + ')';
+      log.appendChild(line);
+      setStatus('COORDINATES & DATE SENT TO SATQUERY AI');
+    } else {
+      const line = document.createElement('div');
+      line.className = 'pending';
+      line.textContent = '> Streamlit bridge not detected — running outside a Streamlit component context. Payload logged to console instead.';
+      log.appendChild(line);
+      console.warn('Streamlit bridge not available. Payload:', payload);
+      setStatus('STREAMLIT BRIDGE NOT DETECTED');
+    }
+  });
+
+  // ---------- Streamlit component lifecycle ----------
+  // Fixed frame height because this app is a full-viewport (100vh/100vw) layout
+  // rather than a naturally-flowing document. Set the same value as the
+  // `height=` argument when declaring this component in Python so the iframe
+  // doesn't clip or leave dead space.
+  const STREAMLIT_FRAME_HEIGHT = 720;
+
+  if(window.Streamlit){
+    Streamlit.setFrameHeight(STREAMLIT_FRAME_HEIGHT);
+    Streamlit.setComponentReady();
+    window.addEventListener('resize', function(){
+      Streamlit.setFrameHeight(STREAMLIT_FRAME_HEIGHT);
+    });
+  }
+
+updateAOIReadout();
+})();
+</script>
+
+<!-- PURE JS STREAMLIT BRIDGE: ZERO EXTERNAL LIBRARIES NEEDED -->
+<script>
+  window.Streamlit = {
+    setComponentReady: function() {
+      window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+    },
+    setFrameHeight: function(height) {
+      window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: height || 750 }, "*");
+    },
+    setComponentValue: function(value) {
+      window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setComponentValue", value: value }, "*");
+    }
+  };
+
+  // 1. Instantly execute the handshake to stop the timeout
+  window.Streamlit.setComponentReady();
+  
+  // 2. Lock the height so the map is visible
+  window.Streamlit.setFrameHeight(750);
+</script>
+
+</body>
+</html>

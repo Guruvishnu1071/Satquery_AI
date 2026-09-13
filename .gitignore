@@ -1,0 +1,12 @@
+# Environments and Secrets
+venv/
+.env
+__pycache__/
+
+# Large AI Models
+*.pth
+
+# Downloaded Images & Local Data
+data/
+uploads/
+*.tif
