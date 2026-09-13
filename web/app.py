@@ -865,8 +865,8 @@ def fetch_geotiff_from_copernicus(bbox: List[float], date_from: str, date_to: st
     date_from, date_to : "YYYY-MM-DD" strings.
     output_filename : destination path for the downloaded GeoTIFF.
     """
-    client_id ="sh-2ef789b2-c119-4b4b-a100-65f8ef6a51e6"
-    client_secret ="64a4tW0YWPxU6UhxO5MxVgr9FnVPOGaa"
+    client_id = os.environ.get("CDSE_CLIENT_ID")
+    client_secret = os.environ.get("CDSE_CLIENT_SECRET")
     if not client_id or not client_secret:
         raise EnvironmentError(
             "CDSE_CLIENT_ID and CDSE_CLIENT_SECRET environment variables must be set. "
