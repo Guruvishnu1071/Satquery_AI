@@ -347,6 +347,19 @@ def compute_bitemporal_change(path_t1: str, path_t2: str) -> Dict:
         "change_pct": change_percentage,
     }
 
+def _render_change_heatmap(heatmap_arr: np.ndarray) -> None:
+    """Renders a discrete 3-colour (Green/Yellow/Red) change heatmap."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    cmap = ListedColormap(["#2ecc40", "#ffdc00", "#ff4136"])
+    max_val = max(1.0, float(np.max(heatmap_arr)))
+    bounds = [0.0, CHANGE_THRESHOLDS["moderate"], CHANGE_THRESHOLDS["severe"], max_val]
+    norm = BoundaryNorm(bounds, cmap.N)
+    
+    ax.imshow(heatmap_arr, cmap=cmap, norm=norm)
+    ax.axis("off")
+    st.pyplot(fig)
+    plt.close(fig)
+
 
 # --------------------------------------------------------------------------
 # Gemini Vision — single universal report-generation engine
@@ -714,7 +727,7 @@ def _handle_bitemporal(image_paths: List[str], query: str):
             )
 
             st.markdown("**🧠 Satquery Vision Verification**")
-            with st.spinner("Gemini is visually comparing T1 and T2..."):
+            with st.spinner("Satquery is visually comparing T1 and T2..."):
                 report = analyze_images_with_gemini(
                     [image_paths[0], image_paths[1]], query, telemetry,
                 )
