@@ -42,6 +42,16 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import sys
+import os
+
+# Force Python to look outside the 'web' folder to find 'core' and 'agent'
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# --- Your normal imports (like import streamlit as st) go below this line! ---
+
 import numpy as np
 import requests
 import streamlit as st
