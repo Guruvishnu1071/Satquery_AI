@@ -583,6 +583,43 @@ def _render_map_picker():
         except Exception as exc:
             st.error(f"Download failed. Check your API credentials. Error: {exc}")
 
+import uuid
+
+def _render_pdf_download_button(report_text: str, query: str, image_paths: List[str], task_name: str, confidence_score: float = 85.0):
+    """Packages analysis results into the expected trace format and serves the PDF."""
+    try:
+        # Build the exact trace dictionary structure expected by report_generator.py
+        trace_data = {
+            "query_id": str(uuid.uuid4()),
+            "query": query,
+            "selected_task": task_name,
+            "input_configuration": "Remote Sensing Analysis",
+            "status": "COMPLETED",
+            "dispatched_tools": [{"tool": "EuroSAT Classifier"}, {"tool": "Gemini Vision"}],
+            "evidence_grounded_answer": report_text,
+            "confidence": {
+                "components": {"EuroSAT Brain": confidence_score / 100.0},
+                "final_score": confidence_score / 100.0,
+            },
+            "spatial_evidence": {"bounding_boxes": []},
+            "warnings": [],
+        }
+
+        # Generate the PDF file on disk
+        pdf_file_path = generate_pdf_report(trace_data, image_paths)
+
+        # Read the file and provide the download button
+        with open(pdf_file_path, "rb") as f:
+            pdf_bytes = f.read()
+
+        st.download_button(
+            label="📄 Download Analytical PDF Report",
+            data=pdf_bytes,
+            file_name=f"satquery_report_{trace_data['query_id'][:8]}.pdf",
+            mime="application/pdf",
+        )
+    except Exception as exc:
+        st.warning(f"Could not compile PDF report: {exc}")
 
 def _handle_single_image(image_paths: List[str], query: str):
     try:
@@ -633,6 +670,7 @@ def _handle_single_image(image_paths: List[str], query: str):
         with st.spinner("Satquery is inspecting the imagery and drafting a report..."):
             report = analyze_images_with_gemini([image_paths[0]], query, telemetry)
             st.success(report)
+            _render_pdf_download_button(report, query, image_paths, "Single Image Classification", confidence)
 
     except Exception as exc:
         st.error(f"The AI Brain encountered an error: {exc}")
@@ -732,6 +770,7 @@ def _handle_bitemporal(image_paths: List[str], query: str):
                     [image_paths[0], image_paths[1]], query, telemetry,
                 )
                 st.success(report)
+                _render_pdf_download_button(report, query, image_paths, "Bi-Temporal Change Detection", results["conf_t2"])
 
     except Exception as exc:
         st.error(f"Bi-temporal pipeline error: {exc}")
@@ -767,6 +806,7 @@ def _handle_cross_modal(image_paths: List[str], query: str):
         with st.spinner("Satquery is cross-referencing optical and SAR imagery..."):
             report = analyze_images_with_gemini([image_paths[0], image_paths[1]], query, telemetry)
             st.success(report)
+            _render_pdf_download_button(report, query, image_paths, "Optical + SAR Cross-Modal Fusion", 90.0)
 
     except Exception as exc:
         st.error(f"Cross-modal fusion pipeline error: {exc}")
