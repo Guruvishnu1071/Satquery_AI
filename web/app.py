@@ -50,6 +50,7 @@ if project_root not in sys.path:
 
 # --- Your normal imports (like import streamlit as st) go below this line! ---
 
+from models.detector import detect_objects
 import numpy as np
 import requests
 import streamlit as st
@@ -585,23 +586,26 @@ def _render_map_picker():
 
 import uuid
 
-def _render_pdf_download_button(report_text: str, query: str, image_paths: List[str], task_name: str, confidence_score: float = 85.0):
-    """Packages analysis results into the expected trace format and serves the PDF."""
+# Change the definition to accept a 'boxes' list
+def _render_pdf_download_button(report_text: str, query: str, image_paths: List[str], task_name: str, confidence_score: float = 85.0, boxes: list = None):
+    if boxes is None:
+        boxes = []
+        
     try:
-        # Build the exact trace dictionary structure expected by report_generator.py
         trace_data = {
             "query_id": str(uuid.uuid4()),
             "query": query,
             "selected_task": task_name,
             "input_configuration": "Remote Sensing Analysis",
             "status": "COMPLETED",
-            "dispatched_tools": [{"tool": "EuroSAT Classifier"}, {"tool": "Gemini Vision"}],
+            "dispatched_tools": [{"tool": "EuroSAT Classifier"}, {"tool": "YOLO Object Detector"}, {"tool": "Gemini Vision"}],
             "evidence_grounded_answer": report_text,
             "confidence": {
                 "components": {"EuroSAT Brain": confidence_score / 100.0},
                 "final_score": confidence_score / 100.0,
             },
-            "spatial_evidence": {"bounding_boxes": []},
+            # Inject the boxes here!
+            "spatial_evidence": {"bounding_boxes": boxes},
             "warnings": [],
         }
 
@@ -665,12 +669,22 @@ def _handle_single_image(image_paths: List[str], query: str):
             f"- {weather_context}"  # <--- WE ADDED THIS NEW LINE!
         )
 
+        # --- NEW YOLO INTEGRATION ---
+        with st.spinner("Scanning for distinct objects..."):
+            detected_boxes = detect_objects(image_paths[0])
+            if detected_boxes:
+                st.subheader("🎯 Target Acquisition (YOLO)")
+                _render_overlay(image_paths[0], detected_boxes, f"Detected {len(detected_boxes)} objects")
+        # -----------------------------
+
         st.divider()
         st.subheader("🧠 Satquery Vision Intelligence Report")
         with st.spinner("Satquery is inspecting the imagery and drafting a report..."):
             report = analyze_images_with_gemini([image_paths[0]], query, telemetry)
             st.success(report)
-            _render_pdf_download_button(report, query, image_paths, "Single Image Classification", confidence)
+            
+            # Pass the detected_boxes to the PDF generator!
+            _render_pdf_download_button(report, query, image_paths, "Single Image Classification", confidence, boxes=detected_boxes)
 
     except Exception as exc:
         st.error(f"The AI Brain encountered an error: {exc}")
