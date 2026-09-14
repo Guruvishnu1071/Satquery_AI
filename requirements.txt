@@ -35,3 +35,4 @@ pyarrow
 # --- AI & APIs (Added for GPT-4o & Copernicus) ---
 requests
 google-genai
+ultralytics
