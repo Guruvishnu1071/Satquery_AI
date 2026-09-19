@@ -812,7 +812,7 @@ def _handle_single_image(image_paths: List[str], query: str):
         st.info(f"**🗣️ Query:** *\"{query}\"*")
 
         with st.container(border=True):
-            st.markdown("### 🤖 AI Answer")
+            st.markdown("### 🤖 Satquery vision language model answer")
             st.markdown(f"> {report}")
             st.divider()
             st.markdown(f"**Evidence Confidence Score:** {confidence:.2f}%")
