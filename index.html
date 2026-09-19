@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SatQuery AI - Local Test</title>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            padding: 40px; 
+            max-width: 600px; 
+            margin: auto;
+        }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; }
+        button { 
+            padding: 10px 20px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+        }
+        button:hover { background-color: #0056b3; }
+        #result { 
+            background: #f4f4f4; 
+            padding: 20px; 
+            margin-top: 25px; 
+            border-radius: 5px; 
+            white-space: pre-wrap; 
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h2>Test SatQuery Backend</h2>
+    
+    <div class="form-group">
+        <label for="imageUpload">Upload Satellite Image:</label>
+        <input type="file" id="imageUpload" accept="image/*">
+    </div>
+    
+    <div class="form-group">
+        <label for="queryInput">Natural Language Query:</label>
+        <input type="text" id="queryInput" placeholder="e.g., What are the major objects in this area?">
+    </div>
+    
+    <button onclick="sendData()">Analyze Image</button>
+
+    <div id="result">Results will appear here...</div>
+
+    <script>
+        async function sendData() {
+            const fileInput = document.getElementById('imageUpload');
+            const queryInput = document.getElementById('queryInput');
+            const resultDiv = document.getElementById('result');
+
+            // Basic validation
+            if (fileInput.files.length === 0) {
+                alert("Please select an image first.");
+                return;
+            }
+            if (queryInput.value.trim() === "") {
+                alert("Please enter a query.");
+                return;
+            }
+
+            resultDiv.innerText = "Agentic Orchestrator is processing... Please wait.";
+
+            // Bundle the data exactly how FastAPI expects it
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            formData.append("query", queryInput.value);
+
+            try {
+                // Send the POST request to your local Uvicorn server
+                const response = await fetch("http://127.0.0.1:8000/analyze", {
+                    method: "POST",
+                    body: formData
+                });
+                
+                // Parse and display the JSON response
+                const data = await response.json();
+                resultDiv.innerText = JSON.stringify(data, null, 2);
+            } catch (error) {
+                resultDiv.innerText = "Error: Is your FastAPI server running? \n" + error.message;
+            }
+        }
+    </script>
+</body>
+</html>
