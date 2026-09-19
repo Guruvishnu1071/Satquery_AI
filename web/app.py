@@ -963,102 +963,6 @@ def _handle_cross_modal(image_paths: List[str], query: str):
     except Exception as exc:
         st.error(f"Cross-modal fusion pipeline error: {exc}")
 
-import time
-from typing import List
-import streamlit as st
-
-def _handle_text_grounding(image_paths: List[str], query: str):
-    try:
-        image_path = image_paths[0]
-
-        # ========================================================
-        # 1. THE AGENTIC TRACE (Validates & Routes)
-        # ========================================================
-        with st.status("🤖 Agentic Controller: Initializing Text-Guided Grounding...", expanded=True) as status:
-            
-            # Phase 1: Validation
-            st.write("✓ Checking input: 1 image detected")
-            st.write("✓ Validating CRS and spatial resolution...")
-            time.sleep(0.5)
-            
-            # Phase 2: Routing
-            status.update(label="🤖 Agentic Controller: Classifying query intent...")
-            st.write(f"✓ User Query: '{query}'")
-            st.write("✓ Intent Classified: Text-Guided Spatial Grounding")
-            
-            # Phase 3: Grounding Execution
-            status.update(label="⚙️ Executing Vision-Language Grounding Agent...")
-            st.write("✓ Selected Model: rs_grounding (Zero-Shot Region Locator)")
-            
-            # 🟢 PUT YOUR ACTUAL GROUNDING INFERENCE CODE HERE 🟢
-            # Example: grounded_boxes, confidence = compute_text_grounding(image_path, query)
-            # ---------------------------------------------------
-            # For this placeholder to work, we mock the output variables:
-            grounded_boxes = [[50, 120, 200, 350]] # Example [ymin, xmin, ymax, xmax]
-            confidence = 94.2
-            
-            if grounded_boxes:
-                st.write(f"✓ Target visually acquired. Grounding confidence: {confidence}%")
-            else:
-                st.write("✓ Scan complete. Target not found in the current spatial extent.")
-
-            # Phase 4: Telemetry Aggregation
-            status.update(label="🧠 Compiling evidence for Cloud VLM...")
-            
-            telemetry = (
-                f"- Task Type: Text-Guided Region Grounding\n"
-                f"- Target Entity Requested: '{query}'\n"
-                f"- Target Found: {'Yes' if grounded_boxes else 'No'}\n"
-                f"- Grounding Confidence: {confidence}%\n"
-                f"- Spatial Coordinates (Bounding Boxes): {grounded_boxes}"
-            )
-            st.write("✓ Spatial telemetry compiled.")
-            
-            # Phase 5: Cloud Reasoning
-            status.update(label="🧠 Dispatching payload to Cloud VLM...")
-            report = analyze_images_with_gemini([image_path], f"Confirm and describe the grounded target: {query}", telemetry)
-            
-            status.update(label="✅ Grounding Complete!", state="complete", expanded=False)
-
-        # ========================================================
-        # 2. THE VISUAL DASHBOARD (Renders below the trace)
-        # ========================================================
-        
-        st.divider()
-        st.subheader("🎯 Text-Guided Spatial Grounding")
-        
-        # Display tactical metrics
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Target Entity", f"\"{query}\"")
-        with col2:
-            if grounded_boxes:
-                st.metric("Localization Confidence", f"{confidence}%")
-            else:
-                st.metric("Localization Confidence", "N/A (Not Found)")
-
-        # Display the visual evidence (Image with Bounding Box)
-        st.markdown("### 🗺️ Visual Evidence")
-        if grounded_boxes:
-            # Re-use your existing YOLO overlay function to draw the grounding box!
-            _render_overlay(image_path, grounded_boxes, f"Target Located: {query}")
-            st.caption(f"Bounding box dynamically generated based on the natural language query: '{query}'")
-        else:
-            st.image(image_path, caption="Original Image", use_container_width=True)
-            st.warning(f"⚠️ The requested target ('{query}') could not be confidently located in this image.")
-
-        # AI Report & PDF Button
-        st.divider()
-        st.subheader("🧠 SatQuery Vision Verification Report")
-        st.success(report)
-        
-        # Pass data to the PDF generator
-        _render_pdf_download_button(report, query, image_paths, "Text-Guided Region Grounding", confidence, boxes=grounded_boxes)
-
-    except Exception as exc:
-        st.error(f"Grounding pipeline error: {exc}")        
-
-
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
@@ -1074,7 +978,6 @@ def main():
             "Select analysis mode:", 
             [
                 "Single Image Classification",
-                "Text-Guided Grounding",
                 "Bi-Temporal Pair (Change Detection)",
                 "Cross-Modal (Optical + SAR)",
                 "Interactive 3D Map Picker"
@@ -1100,7 +1003,7 @@ def main():
     if input_mode == "Interactive 3D Map Picker":
         _render_map_picker()
 
-    elif input_mode in ["Single Image Classification", "Text-Guided Grounding"]:
+    elif input_mode in ["Single Image Classification"]:
         f = st.file_uploader("Upload GeoTIFF/TIFF/PNG/JPEG", type=["tif", "tiff", "png", "jpg", "jpeg"])
         if f:
             image_paths = [_save_upload(f)]
@@ -1151,9 +1054,6 @@ def main():
     if run:
         if input_mode == "Single Image Classification":
             _handle_single_image(image_paths, query)
-            
-        elif input_mode == "Text-Guided Grounding":
-            _handle_text_grounding(image_paths, query)
             
         elif input_mode == "Bi-Temporal Pair (Change Detection)":
             _handle_bitemporal(image_paths, query)
